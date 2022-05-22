@@ -16,7 +16,7 @@ use types::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::config]
@@ -30,6 +30,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn unique_asset)]
+	/// A mapping of UniqueAssetId's to UniqueAssetDetails
 	pub(super) type UniqueAsset<T: Config> =
 		StorageMap<_, Blake2_128Concat, UniqueAssetId, UniqueAssetDetails<T>>;
 
@@ -88,11 +89,85 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
 		pub fn mint(origin: OriginFor<T>, metadata: Vec<u8>, supply: u128) -> DispatchResult {
+			// Ensure signed transaction
+			let who = ensure_signed(origin)?;
+
+			// `supply` must be > 0
+			ensure!(supply > 0, Error::<T>::NoSupply);
+
+			// Create `UniqueAssetDetails
+			let u_asset_details = UniqueAssetDetails::new(who.clone(), metadata, supply);
+
+			// Get current nonce
+			let nonce = Self::nonce();
+
+			// Update storage
+			UniqueAsset::<T>::insert(nonce, u_asset_details);
+
+			// Update `who`' balance
+			Account::<T>::mutate(nonce, who.clone(), |balance| -> DispatchResult {
+				*balance = (*balance).saturating_add(supply);
+
+				Ok(())
+			})?;
+
+			// Increment nonce
+			Nonce::<T>::mutate(|num| {
+				*num = *num + 1;
+			});
+
+			// Deposit event
+			Self::deposit_event(Event::<T>::Created {
+				creator: who,
+				asset_id: nonce,
+			});
+
 			Ok(())
 		}
 
 		#[pallet::weight(0)]
 		pub fn burn(origin: OriginFor<T>, asset_id: UniqueAssetId, amount: u128) -> DispatchResult {
+			// Ensure signed transaction
+			let who = ensure_signed(origin)?;
+
+			// Must be valid `asset_id`
+			ensure!(Self::unique_asset(asset_id).is_some(), Error::<T>::Unknown);
+			// Must have non-zero balance
+			ensure!(
+				Self::account(asset_id, who.clone()) > 0,
+				Error::<T>::NotOwned
+			);
+
+			let mut user_burned = 0;
+
+			// Burn: Subtract `amount` from `who`'s account
+			Account::<T>::mutate(asset_id, who.clone(), |balance| -> DispatchResult {
+				let old_balance = *balance;
+				*balance = old_balance.saturating_sub(amount);
+				user_burned = old_balance - *balance;
+
+				Ok(())
+			})?;
+
+			let mut total_supply = 0;
+
+			// Burn: Subtract `user_burned` from total asset supply
+			UniqueAsset::<T>::mutate(asset_id, |asset_details| -> DispatchResult {
+				let details = asset_details.as_mut().unwrap();
+				let old_supply = details.supply;
+				details.supply = old_supply.saturating_sub(user_burned);
+				total_supply = details.supply;
+
+				Ok(())
+			})?;
+
+			// Deposit event
+			Self::deposit_event(Event::<T>::Burned {
+				asset_id,
+				owner: who,
+				total_supply,
+			});
+
 			Ok(())
 		}
 
@@ -103,6 +178,43 @@ pub mod pallet {
 			amount: u128,
 			to: T::AccountId,
 		) -> DispatchResult {
+			// Ensure signed transaction
+			let who = ensure_signed(origin)?;
+
+			// Must be valid `asset_id`
+			ensure!(Self::unique_asset(asset_id).is_some(), Error::<T>::Unknown);
+			// Must have non-zero balance
+			ensure!(
+				Self::account(asset_id, who.clone()) > 0,
+				Error::<T>::NotOwned
+			);
+
+			let mut transferred_from_source = 0;
+
+			// Subtract `amount` from `who`'s balance
+			Account::<T>::mutate(asset_id, who.clone(), |balance| -> DispatchResult {
+				let old_balance = *balance;
+				*balance = (*balance).saturating_sub(amount);
+				transferred_from_source = old_balance - *balance;
+
+				Ok(())
+			})?;
+
+			// Add `transfered_from_source` to `to` account balance
+			Account::<T>::mutate(asset_id, to.clone(), |balance| -> DispatchResult {
+				*balance = (*balance) + transferred_from_source;
+
+				Ok(())
+			})?;
+
+			// Deposit event
+			Self::deposit_event(Event::<T>::Transferred {
+				asset_id,
+				from: who,
+				to,
+				amount,
+			});
+
 			Ok(())
 		}
 	}
