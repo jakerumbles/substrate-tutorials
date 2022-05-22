@@ -14,7 +14,11 @@ pub struct UniqueAssetDetails<T: Config> {
 
 impl<T: Config> UniqueAssetDetails<T> {
 	pub fn new(creator: T::AccountId, metadata: Vec<u8>, supply: u128) -> Self {
-		UniqueAssetDetails { creator, metadata, supply }
+		UniqueAssetDetails {
+			creator,
+			metadata,
+			supply,
+		}
 	}
 
 	pub fn creator(&self) -> T::AccountId {

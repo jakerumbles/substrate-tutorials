@@ -119,7 +119,7 @@ pub fn run() -> sc_cli::Result<()> {
 				Ok((cmd.run(client, backend), task_manager))
 			})
 		},
-		Some(Subcommand::Benchmark(cmd)) =>
+		Some(Subcommand::Benchmark(cmd)) => {
 			if cfg!(feature = "runtime-benchmarks") {
 				let runner = cli.create_runner(cmd)?;
 
@@ -130,7 +130,8 @@ pub fn run() -> sc_cli::Result<()> {
 				     `--features runtime-benchmarks`."
 						.into(),
 				)
-			},
+			}
+		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {

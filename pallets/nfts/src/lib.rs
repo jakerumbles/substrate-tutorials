@@ -55,11 +55,23 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// New unique asset created
-		Created { creator: T::AccountId, asset_id: UniqueAssetId },
+		Created {
+			creator: T::AccountId,
+			asset_id: UniqueAssetId,
+		},
 		/// Some assets have been burned
-		Burned { asset_id: UniqueAssetId, owner: T::AccountId, total_supply: u128 },
+		Burned {
+			asset_id: UniqueAssetId,
+			owner: T::AccountId,
+			total_supply: u128,
+		},
 		/// Some assets have been transferred
-		Transferred { asset_id: UniqueAssetId, from: T::AccountId, to: T::AccountId, amount: u128 },
+		Transferred {
+			asset_id: UniqueAssetId,
+			from: T::AccountId,
+			to: T::AccountId,
+			amount: u128,
+		},
 	}
 
 	#[pallet::error]
