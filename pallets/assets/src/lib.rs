@@ -14,7 +14,7 @@ mod tests;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -142,8 +142,17 @@ pub mod pallet {
 
 			// TODO:
 			// - create a new AssetMetadata instance based on the call arguments
+			let asset_metadata = AssetMetadata::new(name.clone(), symbol.clone());
+
 			// - insert this metadata in the Metadata storage, under the asset_id key
+			Metadata::<T>::insert(asset_id, asset_metadata);
+
 			// - deposit an `Created` event
+			Self::deposit_event(Event::<T>::MetadataSet {
+				asset_id,
+				name,
+				symbol,
+			});
 
 			Ok(())
 		}
@@ -157,15 +166,20 @@ pub mod pallet {
 		) -> DispatchResult {
 			// TODO:
 			// - ensure the extrinsic origin is a signed transaction
+			let who = ensure_signed(origin)?;
+
 			// - ensure the caller is the asset owner
+			Self::ensure_is_owner(asset_id.clone(), who.clone())?;
 
 			let mut minted_amount = 0;
+			let mut total_supply = 0;
 
 			Asset::<T>::try_mutate(asset_id, |maybe_details| -> DispatchResult {
 				let details = maybe_details.as_mut().ok_or(Error::<T>::Unknown)?;
 
 				let old_supply = details.supply;
 				details.supply = details.supply.saturating_add(amount);
+				total_supply = details.supply;
 				minted_amount = details.supply - old_supply;
 
 				Ok(())
@@ -176,6 +190,11 @@ pub mod pallet {
 			});
 
 			// TODO: Deposit a `Minted` event
+			Self::deposit_event(Event::<T>::Minted {
+				asset_id,
+				owner: to,
+				total_supply,
+			});
 
 			Ok(())
 		}
@@ -184,9 +203,37 @@ pub mod pallet {
 		pub fn burn(origin: OriginFor<T>, asset_id: AssetId, amount: u128) -> DispatchResult {
 			// TODO:
 			// - ensure the extrinsic origin is a signed transaction
+			let who = ensure_signed(origin)?;
+
+			let mut new_total_supply = 0;
+
 			// - mutate the total supply
-			// - mutate the account balance
+			Asset::<T>::try_mutate(asset_id, |maybe_details| -> DispatchResult {
+				// Get access to `AssetDetails`
+				let details = maybe_details.as_mut().ok_or(Error::<T>::Unknown)?;
+
+				let mut burned_amount = 0;
+
+				// - mutate the account balance
+				Account::<T>::try_mutate(asset_id, who.clone(), |balance| -> DispatchResult {
+					let old_balance = *balance;
+					*balance = balance.saturating_sub(amount);
+					burned_amount = old_balance - *balance;
+					Ok(())
+				})?;
+
+				details.supply -= burned_amount;
+				new_total_supply = details.supply;
+
+				Ok(())
+			})?;
+
 			// - emit a `Burned` event
+			Self::deposit_event(Event::<T>::Burned {
+				asset_id,
+				owner: who,
+				total_supply: new_total_supply,
+			});
 
 			Ok(())
 		}
@@ -200,8 +247,44 @@ pub mod pallet {
 		) -> DispatchResult {
 			// TODO:
 			// - ensure the extrinsic origin is a signed transaction
+			let who = ensure_signed(origin)?;
+
+			// Ensure asset is valid
+			ensure!(Self::asset(asset_id).is_some(), Error::<T>::Unknown);
+
 			// - mutate both account balance
+			let mut transferred_from_source = 0;
+			let mut transferred_to_dest = 0;
+
+			Account::<T>::try_mutate(asset_id, to.clone(), |to_balance| -> DispatchResult {
+				// Subtract `amount` from source account. If `amount` > source account balance, subtract entire source account balance
+				Account::<T>::try_mutate(
+					asset_id,
+					who.clone(),
+					|from_balance| -> DispatchResult {
+						let old_balance = *from_balance;
+						*from_balance = old_balance.saturating_sub(amount);
+						transferred_from_source = old_balance - *from_balance;
+
+						Ok(())
+					},
+				)?;
+
+				// Add `transferred_from_source` to destination account balance
+				let old_balance = *to_balance;
+				*to_balance = to_balance.saturating_add(transferred_from_source);
+				transferred_to_dest = *to_balance - old_balance;
+
+				Ok(())
+			})?;
+
 			// - emit a `Transfered` event
+			Self::deposit_event(Event::<T>::Transferred {
+				asset_id,
+				from: who,
+				to,
+				amount: transferred_to_dest,
+			});
 
 			Ok(())
 		}
