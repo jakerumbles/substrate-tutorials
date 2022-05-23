@@ -82,7 +82,8 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 
 			ensure!(amount > 0, Error::<T>::ZeroAmount);
-			let owned = todo!("get the amount of this specific nft owned by the seller, throug the Ressource type and it's Sellabe trait");
+			// Get the amount of this specific nft owned by the seller, through the Ressource type and it's Sellabe trait
+			let owned = T::Ressource::amount_owned(nft_id.clone(), origin.clone());
 			ensure!(owned >= amount, Error::<T>::NotEnoughOwned);
 
 			RessourcesForSale::<T>::insert(nft_id, origin.clone(), SaleData { price, amount });
@@ -102,7 +103,8 @@ pub mod pallet {
 			let buyer = ensure_signed(origin)?;
 
 			let sale_data = RessourcesForSale::<T>::get(nft_id, seller.clone());
-			let owned = todo!("get the amount of this specific nft owned by the seller, throug the Ressource type and it's Sellabe trait");
+			// let owned = todo!("get the amount of this specific nft owned by the seller, throug the Ressource type and it's Sellabe trait");
+			let owned = T::Ressource::amount_owned(nft_id, seller.clone());
 
 			ensure!(amount <= sale_data.amount, Error::<T>::NotEnoughInSale);
 			ensure!(sale_data.amount <= owned, Error::<T>::NotEnoughOwned);
@@ -114,7 +116,8 @@ pub mod pallet {
 
 			T::Currency::transfer(&buyer, &seller, total_to_pay, KeepAlive)?;
 
-			todo!("transefer amount of nft_id from the sellet to the buyer");
+			// Transefer amount of nft_id from the sellet to the buyer
+			T::Ressource::transfer(nft_id, seller.clone(), buyer.clone(), amount);
 
 			if amount == sale_data.amount {
 				RessourcesForSale::<T>::remove(nft_id, seller.clone());

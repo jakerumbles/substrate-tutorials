@@ -23,7 +23,7 @@ pub mod pallet {
 	use frame_system::{ensure_signed, pallet_prelude::*};
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + scale_info::TypeInfo + todo!("add a dependecy on pallet_nft::Config") {
+	pub trait Config: frame_system::Config + scale_info::TypeInfo + pallet_nft::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type Currency: Currency<Self::AccountId>;
 	}
@@ -74,7 +74,8 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 
 			ensure!(amount > 0, Error::<T>::ZeroAmount);
-			let owned = todo!("get the amount owned from the pallet_nft account storage");
+			// Get the amount owned from the pallet_nft account storage
+			let owned = pallet_nft::Pallet::<T>::account(nft_id, origin.clone());
 			ensure!(owned >= amount, Error::<T>::NotEnoughOwned);
 
 			NFTsForSale::<T>::insert(nft_id, origin.clone(), SaleData { price, amount });
@@ -94,7 +95,8 @@ pub mod pallet {
 			let buyer = ensure_signed(origin)?;
 
 			let sale_data = NFTsForSale::<T>::get(nft_id, seller.clone());
-			let owned = todo!("get the amount owned from the pallet_nft account storage");
+			// Get the amount owned from the pallet_nft account storage
+			let owned = pallet_nft::Pallet::<T>::account(nft_id, seller.clone());
 
 			ensure!(amount <= sale_data.amount, Error::<T>::NotEnoughInSale);
 			ensure!(sale_data.amount <= owned, Error::<T>::NotEnoughOwned);
@@ -104,9 +106,16 @@ pub mod pallet {
 				.checked_mul(&amount.checked_into().ok_or(Error::<T>::Overflow)?)
 				.ok_or(Error::<T>::Overflow)?;
 
-			<T as pallet::Config>::Currency::transfer(&buyer, &seller, total_to_pay, KeepAlive)?;
+			// <T as pallet::Config>::Currency::transfer(&buyer, &seller, total_to_pay, KeepAlive)?;
+			T::Currency::transfer(&buyer, &seller, total_to_pay, KeepAlive)?;
 
-			todo!("call the pallet_nft transfer function");
+			// Call the pallet_nft (unchecked_)transfer function
+			pallet_nft::Pallet::<T>::unchecked_transfer(
+				nft_id,
+				seller.clone(),
+				buyer.clone(),
+				amount,
+			);
 
 			if amount == sale_data.amount {
 				NFTsForSale::<T>::remove(nft_id, seller.clone());

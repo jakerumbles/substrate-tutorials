@@ -203,10 +203,10 @@ use support::Sellable;
 
 impl<T: Config> Sellable<T::AccountId, T::NFTId> for Pallet<T> {
 	fn amount_owned(nft_id: T::NFTId, account: T::AccountId) -> u128 {
-		todo!("retur the amount of nft_id owned by account")
+		Pallet::<T>::account(nft_id, account)
 	}
 
 	fn transfer(nft_id: T::NFTId, from: T::AccountId, to: T::AccountId, amount: u128) -> u128 {
-		todo!("do the transfer")
+		Pallet::<T>::unchecked_transfer(nft_id, from, to, amount)
 	}
 }
